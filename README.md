@@ -1,1 +1,1 @@
-Posterio is an AI-powered goal-setting and achievement application that enhances personal productivity through personalized recommendations, based on behavioral science. By integrating human psychology, it increases the rate of success in goal achievement rate, ensuring users achieve what they set out to.
+Posterio is an AI-powered goal-setting application that increases productivity through personalized recommendations, based on behavioral science. By integrating human psychology, it ensures users achieve what they set out to.
