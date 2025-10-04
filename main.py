@@ -61,3 +61,9 @@ async def chat(req: ChatRequest):
 
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/")
+async def root():
+    return {"message": "Posterio AI API is live! Use POST /chat to interact."}
+
+
