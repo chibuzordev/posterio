@@ -2,7 +2,7 @@
 import os, json, re
 from typing import List, Optional
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -116,6 +116,7 @@ async def chat(req: ChatRequest):
 @app.get("/")
 async def root():
     return {"message": "Posterio AI API is live! Use POST /chat to interact."}
+
 
 
 
