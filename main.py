@@ -1,65 +1,129 @@
 # main.py
-import os, json, re
-from typing import List, Optional
+import os
+import json
+import re
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from openai import OpenAI
 from dotenv import load_dotenv
+from openai import OpenAI
 
+# Load env
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# ---- SYSTEM PROMPTS ----
+SYSTEM_PROMPT_CONVERSATIONAL = """
+You are Posterio, an AI productivity coach.
+Engage conversationally — motivate users, guide them, and give useful insights.
+"""
+
+SYSTEM_PROMPT_TEMPLATE = """
+You are Posterio, an AI productivity assistant that returns STRICT JSON only.
+
+Follow this JSON schema:
+{
+  "create_goal": null | {"goal": "string", "category": "string"},
+  "templates": [{"title": "string", "text": "string"}],
+  "action_items": [{"title": "string", "due": "YYYY-MM-DD HH:MI:SS"}],
+  "deadline": "YYYY-MM-DD HH:MI:SS",
+  "reminders": [
+    {"day_of_week": null | "startdayDayofweek" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday",
+     "frequency": "daily|weekly|custom",
+     "time": "HH:MM:SS",
+     "message": "string"}
+  ],
+  "meta": {"tokens_used": 0}
+}
+"""
+
+# ---- MODELS ----
+class Message(BaseModel):
+    role: str = Field(..., example="user", description="Role of the message sender ('user' or 'assistant')")
+    content: str = Field(..., example="Help me build a morning focus routine", description="The text of the message")
+
+class ChatRequest(BaseModel):
+    session_id: str = Field(..., example="session-12345", description="Unique session ID for this chat")
+    messages: List[Message] = Field(default=[], description="Conversation history (max last 5 messages)")
+    message: str = Field(..., example="Help me plan a daily study routine", description="New user message")
+    force_template: Optional[bool] = Field(False, example=False, description="Force JSON output mode if true")
+
+class Reminder(BaseModel):
+    day_of_week: Optional[str] = Field(None, example="Monday", description="Day of the week (null = daily)")
+    frequency: str = Field(..., example="daily", description="Reminder frequency: daily, weekly, or custom")
+    time: str = Field(..., example="07:00:00", description="Time of day in HH:MM:SS")
+    message: str = Field(..., example="Morning reminder", description="Reminder message")
+
+class ChatResponse(BaseModel):
+    reply_text: Optional[str] = Field(None, description="Assistant reply (in conversational mode)")
+    create_goal: Optional[Dict[str, Any]] = Field(None, description="Goal definition, if generated")
+    templates: Optional[List[Dict[str, Any]]] = Field(None, description="List of generated templates")
+    action_items: Optional[List[Dict[str, Any]]] = Field(None, description="Generated actionable tasks")
+    deadline: Optional[str] = Field(None, example="2025-12-27 10:00:00", description="Goal deadline if specified")
+    reminders: Optional[List[Reminder]] = Field(None, description="List of reminder objects")
+    meta: Dict[str, Any] = Field(..., description="Metadata including tokens used, model name, etc")
+
+# ---- FASTAPI CONFIG ----
 app = FastAPI(
-    title="Posterio AI Chat API",
+    title="Posterio GenAI Chat API",
     description="""
-Posterio is an AI-powered productivity assistant that helps users achieve their goals through
-personalized insights, templates, and reminders.
+    ### 🧠 What this API does
+    Posterio is an AI-powered productivity assistant designed to help users achieve their goals.
+    It can:
+    - Have **natural conversations** to coach and motivate users.
+    - Generate **structured JSON templates** for goals, reminders, and action plans.
+    
+    Use the `/chat` endpoint to send user messages.  
+    Toggle between conversational or structured (template) output using `force_template`.
 
-### Core Endpoints
-- **POST /chat** → Conversational and Template-based goal planning assistant  
-- **GET /** → Health check  
-- **GET /docs** → Swagger UI  
-- **GET /redoc** → Redoc documentation  
-
-**Developer Note:**  
-This version is running on Render and connects to the OpenAI API (`gpt-4o-mini` by default).
-""",
-    version="1.0.0",
+    ---
+    **Example Use Cases:**
+    - Build a morning routine  
+    - Plan a 3-month fitness goal  
+    - Schedule daily reminders for focus tasks
+    """,
+    version="1.2.0",
     contact={
-        "name": "DecisionSpaak AI Team",
-        "url": "https://www.decisionspaak.com",
-        "email": "decisionspaak@gmail.com",
-    },
-    license_info={
-        "name": "Proprietary License - DecisionSpaak",
-        "url": "https://www.decisionspaak.com/legal",
+        "name": "Posterio AI",
+        "url": "https://posterio.ai",
+        "email": "support@posterio.ai",
     },
 )
 
-# ---- Models ----
-class Message(BaseModel):
-    role: str = Field(..., example="user")
-    content: str = Field(..., example="Help me build a morning focus routine")
+@app.get("/", summary="Health Check", tags=["System"])
+async def health():
+    """Simple health check endpoint."""
+    return {"message": "Posterio API is live. Try POST /chat"}
 
-class ChatRequest(BaseModel):
-    session_id: str = Field(..., example="session-abc123")
-    messages: List[Message] = Field(default=[], example=[{"role": "user", "content": "I want to be more productive"}])
-    message: str = Field(..., example="Suggest a daily focus habit plan")
-    force_template: Optional[bool] = Field(default=False, example=False)
+# ---- JSON PARSER ----
+def extract_and_fix_json(raw: str) -> Dict[str, Any]:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not m:
+            return {"error": "No JSON detected", "raw_output": raw}
+        text = m.group(0)
+        text = text.replace("“", '"').replace("”", '"')
+        text = re.sub(r",\s*}", "}", text)
+        text = re.sub(r",\s*]", "]", text)
+        try:
+            return json.loads(text)
+        except Exception:
+            return {"error": "JSON parse failed", "raw_output": raw}
 
-# ---- Endpoint ----
-@app.post("/chat")
+# ---- ENDPOINT ----
+@app.post("/chat", response_model=ChatResponse, tags=["Chat"])
 async def chat(req: ChatRequest):
-    SYSTEM_PROMPT = """
-    You are Posterio, an AI productivity assistant.
-    By default, respond conversationally like a coach.
-    If the user explicitly asks for a template or `force_template=true`,
-    respond in valid JSON with goal, templates, action_items, deadline, reminders, and meta.
     """
-
-    # Retain last 5 messages
+    Engage with Posterio AI.  
+    - **Default Mode:** Conversational (friendly chat)
+    - **Template Mode:** Returns structured JSON (set `force_template=True`)
+    """
     history = req.messages[-5:] if req.messages else []
-    conversation = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_prompt = SYSTEM_PROMPT_TEMPLATE if req.force_template or "template" in req.message.lower() else SYSTEM_PROMPT_CONVERSATIONAL
+
+    conversation = [{"role": "system", "content": system_prompt}]
     conversation += [{"role": m.role, "content": m.content} for m in history]
     conversation.append({"role": "user", "content": req.message})
 
@@ -67,56 +131,18 @@ async def chat(req: ChatRequest):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=conversation,
-            max_tokens=600,
-            temperature=0.7
+            max_tokens=700,
+            temperature=0.6
         )
         raw_output = response.choices[0].message.content
-        tokens_used = response.usage.total_tokens
+        tokens_used = getattr(response.usage, "total_tokens", 0)
 
         if req.force_template or "template" in req.message.lower():
-            SYSTEM_PROMPT += """
-            IMPORTANT:
-            The user has requested TEMPLATE MODE.
-            Respond ONLY in strict JSON using this schema:
-            {
-              "create_goal": null | {"goal": "string", "category": "string"},
-              "templates": [{"title": "string", "text": "string"}],
-              "action_items": [
-                {"title": "string", "due": "YYYY-MM-DD HH:MI:SS"}
-              ],
-              "deadline": "YYYY-MM-DD HH:MI:SS",
-              "reminders": [
-                {"frequency": "daily|weekly|custom", "time": "HH:MM:SS", "message": "string"}
-              ],
-              "meta": {"tokens_used": 0}
-            }
-            DO NOT include explanations or normal dialogue.
-            """
-            try:
-                output = json.loads(raw_output)
-            except json.JSONDecodeError:
-                cleaned = re.search(r"\{.*\}", raw_output, re.DOTALL)
-                if cleaned:
-                    try:
-                        output = json.loads(cleaned.group())
-                    except:
-                        output = {"error": "Still invalid JSON", "raw": raw_output}
-                else:
-                    output = {"error": "Invalid JSON returned", "raw": raw_output}
-            
+            output = extract_and_fix_json(raw_output)
         else:
             output = {"reply_text": raw_output}
 
         output["meta"] = {"tokens_used": tokens_used, "model": "gpt-4o-mini"}
         return output
-
     except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/")
-async def root():
-    return {"message": "Posterio AI API is live! Use POST /chat to interact."}
-
-
-
-
+        return {"reply_text": f"Error: {str(e)}", "meta": {"tokens_used": 0, "model": "error"}}
