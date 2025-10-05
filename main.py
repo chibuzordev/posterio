@@ -8,36 +8,16 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Load env
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ---- SYSTEM PROMPTS ----
-SYSTEM_PROMPT_CONVERSATIONAL = """
-You are Posterio, an AI productivity coach.
-Engage conversationally — motivate users, guide them, and give useful insights.
-"""
+def load_prompt(file_path: str) -> str:
+    with open(file_path, "r", encoding="utf-8") as f:
+        return f.read().strip()
 
-SYSTEM_PROMPT_TEMPLATE = """
-You are Posterio, an AI productivity assistant that returns STRICT JSON only.
+SYSTEM_PROMPT_CONVERSATIONAL = load_prompt("prompts/system_prompt_conversational.txt")
+SYSTEM_PROMPT_TEMPLATE = load_prompt("prompts/system_prompt_template.txt")
 
-Follow this JSON schema:
-{
-  "create_goal": null | {"goal": "string", "category": "string"},
-  "templates": [{"title": "string", "text": "string"}],
-  "action_items": [{"title": "string", "due": "YYYY-MM-DD HH:MI:SS"}],
-  "deadline": "YYYY-MM-DD HH:MI:SS",
-  "reminders": [
-    {"day_of_week": null | "startdayDayofweek" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday",
-     "frequency": "daily|weekly|custom",
-     "time": "HH:MM:SS",
-     "message": "string"}
-  ],
-  "meta": {"tokens_used": 0}
-}
-"""
-
-# ---- MODELS ----
 class Message(BaseModel):
     role: str = Field(..., example="user", description="Role of the message sender ('user' or 'assistant')")
     content: str = Field(..., example="Help me build a morning focus routine", description="The text of the message")
@@ -63,7 +43,6 @@ class ChatResponse(BaseModel):
     reminders: Optional[List[Reminder]] = Field(None, description="List of reminder objects")
     meta: Dict[str, Any] = Field(..., description="Metadata including tokens used, model name, etc")
 
-# ---- FASTAPI CONFIG ----
 app = FastAPI(
     title="Posterio GenAI Chat API",
     description="""
@@ -146,3 +125,4 @@ async def chat(req: ChatRequest):
         return output
     except Exception as e:
         return {"reply_text": f"Error: {str(e)}", "meta": {"tokens_used": 0, "model": "error"}}
+
