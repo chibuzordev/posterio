@@ -44,13 +44,11 @@ class ChatResponse(BaseModel):
     meta: Dict[str, Any] = Field(..., description="Metadata including tokens used, model name, etc")
 
 app = FastAPI(
-    title="Posterio GenAI Chat API",
+    title="Posterio API",
     description="""
-    ### 🧠 What this API does
+    ### What this API does
     Posterio is an AI-powered productivity assistant designed to help users achieve their goals.
-    It can:
-    - Have **natural conversations** to coach and motivate users.
-    - Generate **structured JSON templates** for goals, reminders, and action plans.
+    It can have natural conversations to coach and motivate users as well as generate structured JSON templates for goals, reminders, and action plans.
     
     Use the `/chat` endpoint to send user messages.  
     Toggle between conversational or structured (template) output using `force_template`.
@@ -60,12 +58,13 @@ app = FastAPI(
     - Build a morning routine  
     - Plan a 3-month fitness goal  
     - Schedule daily reminders for focus tasks
-    """,
-    version="1.2.0",
-    contact={
-        "name": "Posterio AI",
-        "url": "https://posterio.ai",
-        "email": "support@posterio.ai",
+    """
+    # ,
+    # #version="1.2.0",
+    # contact={
+    #     "name": "Posterio AI",
+    #     "url": "https://posterio.ai",
+    #     "email": "support@posterio.ai",
     },
 )
 
@@ -91,8 +90,9 @@ def extract_and_fix_json(raw: str) -> Dict[str, Any]:
         except Exception:
             return {"error": "JSON parse failed", "raw_output": raw}
 
-# ---- ENDPOINT ----
-@app.post("/chat", response_model=ChatResponse, tags=["Chat"])
+
+@app.post("/chat", response_model=ChatResponse, tags=["Chat"], 
+    response_model=ChatResponse,)
 async def chat(req: ChatRequest):
     """
     Engage with Posterio AI.  
@@ -133,4 +133,5 @@ async def swagger_ui():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_ui():
     return get_redoc_html(openapi_url="/openapi.json", title="Posterio ReDoc UI")
+
 
