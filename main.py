@@ -1,12 +1,12 @@
 # main.py
-import os
-import json
-import re
+import os, re, json
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from openai import OpenAI
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -125,4 +125,12 @@ async def chat(req: ChatRequest):
         return output
     except Exception as e:
         return {"reply_text": f"Error: {str(e)}", "meta": {"tokens_used": 0, "model": "error"}}
+
+@app.get("/swagger", include_in_schema=False)
+async def swagger_ui():
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="Posterio Swagger UI")
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_ui():
+    return get_redoc_html(openapi_url="/openapi.json", title="Posterio ReDoc UI")
 
