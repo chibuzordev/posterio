@@ -1,15 +1,17 @@
 # main.py
-import os, re, json
+import os, re, json, uuid
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from openai import OpenAI
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-
+from collections import defaultdict, deque
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Temporary in-memory session store (not persistent)
+session_history = defaultdict(lambda: deque(maxlen=5))
 
 def load_prompt(file_path: str) -> str:
     with open(file_path, "r", encoding="utf-8") as f:
@@ -102,12 +104,19 @@ async def chat(req: ChatRequest):
     - **Default Mode:** Conversational (friendly chat)
     - **Template Mode:** Returns structured JSON (set `force_template=True`)
     """
-    history = req.messages[-5:] if req.messages else []
+    session_id = req.get_or_create_session_id()
+    # history = req.messages[-5:] if req.messages else []
+    
+    history = list(session_history[session_id])
+    
     system_prompt = SYSTEM_PROMPT_TEMPLATE if req.force_template or "template" in req.message.lower() else SYSTEM_PROMPT_CONVERSATIONAL
 
+    history.append({"role": "user", "content": req.message})
+    
     conversation = [{"role": "system", "content": system_prompt}]
     conversation += [{"role": m.role, "content": m.content} for m in history]
     conversation.append({"role": "user", "content": req.message})
+    
 
     try:
         response = client.chat.completions.create(
@@ -117,6 +126,7 @@ async def chat(req: ChatRequest):
             temperature=0.6
         )
         raw_output = response.choices[0].message.content
+        
         tokens_used = getattr(response.usage, "total_tokens", 0)
 
         if req.force_template or "template" in req.message.lower():
@@ -124,6 +134,9 @@ async def chat(req: ChatRequest):
         else:
             output = {"reply_text": raw_output}
 
+                # Save assistant reply to history
+        session_history[session_id].append({"role": "assistant", "content": reply})
+        
         output["meta"] = {"tokens_used": tokens_used, "model": "gpt-4o-mini"}
         return output
     except Exception as e:
@@ -136,6 +149,9 @@ async def swagger_ui():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_ui():
     return get_redoc_html(openapi_url="/openapi.json", title="Posterio ReDoc UI")
+
+
+
 
 
 
