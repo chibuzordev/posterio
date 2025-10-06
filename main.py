@@ -110,8 +110,6 @@ async def chat(req: ChatRequest):
     history = list(session_history[session_id])
     
     system_prompt = SYSTEM_PROMPT_TEMPLATE if req.force_template or "template" in req.message.lower() else SYSTEM_PROMPT_CONVERSATIONAL
-
-    history.append({"role": "user", "content": req.message})
     
     conversation = [{"role": "system", "content": system_prompt}]
     conversation += [{"role": m.role, "content": m.content} for m in history]
@@ -134,8 +132,9 @@ async def chat(req: ChatRequest):
         else:
             output = {"reply_text": raw_output}
 
-                # Save assistant reply to history
-        session_history[session_id].append({"role": "assistant", "content": reply})
+        session_history[session_id].append({"role": "user", "content": req.message})
+        session_history[session_id].append({"role": "assistant", "content": raw_output})
+
         
         output["meta"] = {"tokens_used": tokens_used, "model": "gpt-4o-mini"}
         return output
@@ -149,6 +148,7 @@ async def swagger_ui():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_ui():
     return get_redoc_html(openapi_url="/openapi.json", title="Posterio ReDoc UI")
+
 
 
 
