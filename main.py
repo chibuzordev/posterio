@@ -27,6 +27,10 @@ class ChatRequest(BaseModel):
     messages: List[Message] = Field(default=[], description="Conversation history (max last 5 messages)")
     message: str = Field(..., example="Help me plan a daily study routine", description="New user message")
     force_template: Optional[bool] = Field(False, example=False, description="Force JSON output mode if true")
+    
+    def get_or_create_session_id(self) -> str:
+        """Generate a new session ID if one is not provided."""
+        return self.session_id or f"session_{uuid.uuid4().hex[:8]}"
 
 class Reminder(BaseModel):
     day_of_week: Optional[str] = Field(None, example="Monday", description="Day of the week (null = daily)")
@@ -132,6 +136,7 @@ async def swagger_ui():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_ui():
     return get_redoc_html(openapi_url="/openapi.json", title="Posterio ReDoc UI")
+
 
 
 
