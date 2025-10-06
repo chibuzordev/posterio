@@ -91,8 +91,7 @@ def extract_and_fix_json(raw: str) -> Dict[str, Any]:
             return {"error": "JSON parse failed", "raw_output": raw}
 
 
-@app.post("/chat", response_model=ChatResponse, tags=["Chat"], 
-    response_model=ChatResponse,)
+@app.post("/chat", response_model=ChatResponse, tags=["Chat"])
 async def chat(req: ChatRequest):
     """
     Engage with Posterio AI.  
@@ -133,6 +132,7 @@ async def swagger_ui():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_ui():
     return get_redoc_html(openapi_url="/openapi.json", title="Posterio ReDoc UI")
+
 
 
 
