@@ -65,7 +65,7 @@ app = FastAPI(
     #     "name": "Posterio AI",
     #     "url": "https://posterio.ai",
     #     "email": "support@posterio.ai",
-    },
+    #},
 )
 
 @app.get("/", summary="Health Check", tags=["System"])
@@ -133,5 +133,6 @@ async def swagger_ui():
 @app.get("/redoc", include_in_schema=False)
 async def redoc_ui():
     return get_redoc_html(openapi_url="/openapi.json", title="Posterio ReDoc UI")
+
 
 
